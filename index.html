@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4F46E5">
+    <title>Išlaidų Valdymas</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #root { min-height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+        
+        // Lucide ikonos kaip komponentai
+        const Camera = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+        );
+        
+        const Upload = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+        );
+        
+        const Target = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+            </svg>
+        );
+        
+        const PieChart = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+                <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+            </svg>
+        );
+        
+        const Lightbulb = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="9" y1="18" x2="15" y2="18"/>
+                <line x1="10" y1="22" x2="14" y2="22"/>
+                <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>
+            </svg>
+        );
+        
+        const Check = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+        );
+        
+        const X = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        );
+
+        const ExpenseTrackerApp = () => {
+          const [receipts, setReceipts] = useState([]);
+          const [monthlyPlan, setMonthlyPlan] = useState(null);
+          const [income, setIncome] = useState('');
+          const [fixedExpenses, setFixedExpenses] = useState('');
+          const [savingsGoal, setSavingsGoal] = useState('');
+          const [showSetup, setShowSetup] = useState(true);
+          const [processing, setProcessing] = useState(false);
+          const [currentView, setCurrentView] = useState('scan');
+          const fileInputRef = useRef(null);
+          const videoRef = useRef(null);
+          const [cameraActive, setCameraActive] = useState(false);
+
+          const categories = {
+            saldumynai: { name: 'Saldumynai', color: '#FF6B9D', essential: false },
+            gerimai: { name: 'Gėrimai', color: '#4ECDC4', essential: false },
+            maistas: { name: 'Maistas', color: '#95E1D3', essential: true },
+            darzoves: { name: 'Daržovės', color: '#38A169', essential: true },
+            kuras: { name: 'Kuras', color: '#ED8936', essential: true },
+            buitine_chemija: { name: 'Buitinė chemija', color: '#9F7AEA', essential: true },
+            kita: { name: 'Kita', color: '#718096', essential: false }
+          };
+
+          useEffect(() => {
+            const saved = localStorage.getItem('expenseData');
+            if (saved) {
+              const data = JSON.parse(saved);
+              setReceipts(data.receipts || []);
+              setMonthlyPlan(data.monthlyPlan || null);
+              setIncome(data.income || '');
+              setFixedExpenses(data.fixedExpenses || '');
+              setSavingsGoal(data.savingsGoal || '');
+              if (data.monthlyPlan) setShowSetup(false);
+            }
+          }, []);
+
+          useEffect(() => {
+            if (receipts.length > 0 || monthlyPlan) {
+              localStorage.setItem('expenseData', JSON.stringify({
+                receipts, monthlyPlan, income, fixedExpenses, savingsGoal
+              }));
+            }
+          }, [receipts, monthlyPlan, income, fixedExpenses, savingsGoal]);
+
+          const analyzeReceiptWithAI = async (imageData) => {
+            setProcessing(true);
+            try {
+              const response = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "claude-sonnet-4-20250514",
+                  max_tokens: 1000,
+                  messages: [{
+                    role: "user",
+                    content: [
+                      {
+                        type: "image",
+                        source: { type: "base64", media_type: "image/jpeg", data: imageData }
+                      },
+                      {
+                        type: "text",
+                        text: `Išanalizuok šį kasos čekį ir grąžink TIKTAI JSON formatą be jokių papildomų žodžių:
+{
+  "items": [
+    {
+      "name": "produkto pavadinimas",
+      "price": kaina_skaičius,
+      "category": "viena iš: saldumynai, gerimai, maistas, darzoves, kuras, buitine_chemija, kita",
+      "essential": true/false
+    }
+  ],
+  "total": bendra_suma,
+  "date": "YYYY-MM-DD",
+  "store": "parduotuvės pavadinimas"
+}`
+                      }
+                    ]
+                  }]
+                })
+              });
+
+              const data = await response.json();
+              const text = data.content.find(c => c.type === 'text')?.text || '';
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const receiptData = JSON.parse(jsonMatch[0]);
+                setReceipts(prev => [...prev, { ...receiptData, id: Date.now() }]);
+              }
+            } catch (error) {
+              console.error('Klaida:', error);
+              alert('Nepavyko apdoroti čekio. Bandykite dar kartą.');
+            }
+            setProcessing(false);
+          };
+
+          const generateMonthlyPlan = async () => {
+            if (!income || !fixedExpenses || !savingsGoal) {
+              alert('Užpildykite visus laukus');
+              return;
+            }
+
+            setProcessing(true);
+            try {
+              const currentExpenses = receipts.reduce((sum, r) => sum + r.total, 0);
+              const expensesByCategory = receipts.reduce((acc, receipt) => {
+                receipt.items.forEach(item => {
+                  acc[item.category] = (acc[item.category] || 0) + item.price;
+                });
+                return acc;
+              }, {});
+
+              const response = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "claude-sonnet-4-20250514",
+                  max_tokens: 1000,
+                  messages: [{
+                    role: "user",
+                    content: `Sukurk mėnesio finansų planą lietuvių kalba. Duomenys:
+- Pajamos: ${income}€
+- Privalomos išlaidos: ${fixedExpenses}€
+- Taupymo tikslas: ${savingsGoal}€
+- Dabartinės išlaidos: ${currentExpenses.toFixed(2)}€
+- Išlaidos pagal kategorijas: ${JSON.stringify(expensesByCategory)}
+
+Grąžink TIKTAI JSON formatą:
+{
+  "recommendedBudget": {
+    "saldumynai": suma,
+    "gerimai": suma,
+    "maistas": suma,
+    "darzoves": suma,
+    "kuras": suma,
+    "buitine_chemija": suma,
+    "kita": suma
+  },
+  "savingsRealistic": true/false,
+  "recommendations": ["patarimas1", "patarimas2", "patarimas3"],
+  "potentialSavings": suma,
+  "warning": "įspėjimas arba null"
+}`
+                  }]
+                })
+              });
+
+              const data = await response.json();
+              const text = data.content.find(c => c.type === 'text')?.text || '';
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const plan = JSON.parse(jsonMatch[0]);
+                setMonthlyPlan(plan);
+                setShowSetup(false);
+                setCurrentView('plan');
+              }
+            } catch (error) {
+              console.error('Klaida:', error);
+              alert('Nepavyko sugeneruoti plano.');
+            }
+            setProcessing(false);
+          };
+
+          const handleFileUpload = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              const base64 = e.target.result.split(',')[1];
+              await analyzeReceiptWithAI(base64);
+            };
+            reader.readAsDataURL(file);
+          };
+
+          const startCamera = async () => {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment' } 
+              });
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                setCameraActive(true);
+              }
+            } catch (error) {
+              alert('Nepavyko paleisti kameros. Naudokite nuotraukų įkėlimą.');
+            }
+          };
+
+          const capturePhoto = () => {
+            if (!videoRef.current) return;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = videoRef.current.videoWidth;
+            canvas.height = videoRef.current.videoHeight;
+            canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+            
+            const base64 = canvas.toDataURL('image/jpeg').split(',')[1];
+            analyzeReceiptWithAI(base64);
+            
+            stopCamera();
+          };
+
+          const stopCamera = () => {
+            if (videoRef.current?.srcObject) {
+              videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+              setCameraActive(false);
+            }
+          };
+
+          const getTotalSpent = () => receipts.reduce((sum, r) => sum + r.total, 0);
+          
+          const getSpentByCategory = () => {
+            return receipts.reduce((acc, receipt) => {
+              receipt.items.forEach(item => {
+                acc[item.category] = (acc[item.category] || 0) + item.price;
+              });
+              return acc;
+            }, {});
+          };
+
+          const available = income ? parseFloat(income) - parseFloat(fixedExpenses) - parseFloat(savingsGoal) : 0;
+
+          if (showSetup) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+                <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-6 mt-8">
+                  <div className="text-center mb-6">
+                    <div className="w-16 h-16 text-indigo-600 mx-auto mb-3"><Target /></div>
+                    <h1 className="text-2xl font-bold text-gray-800">Finansų Planavimas</h1>
+                    <p className="text-gray-600 mt-2">Nustatykite savo finansinius tikslus</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Mėnesio pajamos (€)
+                      </label>
+                      <input
+                        type="number"
+                        value={income}
+                        onChange={(e) => setIncome(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="1500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Privalomos išlaidos (€)
+                        <span className="text-xs text-gray-500 block">Nuoma, komunalinės, draudimas</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={fixedExpenses}
+                        onChange={(e) => setFixedExpenses(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Mėnesio taupymo tikslas (€)
+                      </label>
+                      <input
+                        type="number"
+                        value={savingsGoal}
+                        onChange={(e) => setSavingsGoal(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="200"
+                      />
+                    </div>
+
+                    {income && fixedExpenses && savingsGoal && (
+                      <div className="bg-indigo-50 p-4 rounded-lg">
+                        <p className="text-sm text-gray-700">
+                          Likęs biudžetas: <span className="font-bold text-indigo-600">{available.toFixed(2)}€</span>
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={generateMonthlyPlan}
+                      disabled={processing || !income || !fixedExpenses || !savingsGoal}
+                      className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-300 transition-colors"
+                    >
+                      {processing ? 'Kuriamas planas...' : 'Sukurti planą su AI'}
+                    </button>
+
+                    {receipts.length > 0 && (
+                      <button
+                        onClick={() => setShowSetup(false)}
+                        className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                      >
+                        Tęsti be plano
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-gray-50 pb-20">
+              <div className="bg-indigo-600 text-white p-4 shadow-lg">
+                <div className="max-w-4xl mx-auto">
+                  <h1 className="text-xl font-bold">Išlaidų valdymas</h1>
+                  <p className="text-indigo-100 text-sm">
+                    Išleista: {getTotalSpent().toFixed(2)}€ / {available.toFixed(2)}€
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white border-b sticky top-0 z-10">
+                <div className="max-w-4xl mx-auto flex">
+                  <button
+                    onClick={() => setCurrentView('scan')}
+                    className={`flex-1 py-3 px-4 font-medium transition-colors ${
+                      currentView === 'scan' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600'
+                    }`}
+                  >
+                    <div className="w-5 h-5 mx-auto mb-1"><Camera /></div>
+                    Skenuoti
+                  </button>
+                  <button
+                    onClick={() => setCurrentView('expenses')}
+                    className={`flex-1 py-3 px-4 font-medium transition-colors ${
+                      currentView === 'expenses' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600'
+                    }`}
+                  >
+                    <div className="w-5 h-5 mx-auto mb-1"><PieChart /></div>
+                    Išlaidos
+                  </button>
+                  <button
+                    onClick={() => setCurrentView('plan')}
+                    className={`flex-1 py-3 px-4 font-medium transition-colors ${
+                      currentView === 'plan' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-600'
+                    }`}
+                  >
+                    <div className="w-5 h-5 mx-auto mb-1"><Target /></div>
+                    Planas
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-w-4xl mx-auto p-4">
+                {currentView === 'scan' && (
+                  <div className="space-y-4">
+                    {!cameraActive ? (
+                      <div className="grid grid-cols-2 gap-4">
+                        <button
+                          onClick={startCamera}
+                          className="bg-indigo-600 text-white p-6 rounded-xl shadow-lg active:bg-indigo-700"
+                        >
+                          <div className="w-12 h-12 mx-auto mb-2"><Camera /></div>
+                          <span className="block font-semibold">Fotografuoti</span>
+                        </button>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="bg-emerald-600 text-white p-6 rounded-xl shadow-lg active:bg-emerald-700"
+                        >
+                          <div className="w-12 h-12 mx-auto mb-2"><Upload /></div>
+                          <span className="block font-semibold">Įkelti</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <video ref={videoRef} autoPlay playsInline className="w-full rounded-xl" />
+                        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                          <button
+                            onClick={capturePhoto}
+                            className="bg-white text-indigo-600 p-4 rounded-full shadow-lg"
+                          >
+                            <Camera />
+                          </button>
+                          <button
+                            onClick={stopCamera}
+                            className="bg-red-500 text-white p-4 rounded-full shadow-lg"
+                          >
+                            <X />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+
+                    {processing && (
+                      <div className="bg-blue-50 p-4 rounded-lg text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
+                        <p className="text-gray-700">Analizuojama su AI...</p>
+                      </div>
+                    )}
+
+                    {receipts.length > 0 && (
+                      <div className="bg-white rounded-xl shadow p-4">
+                        <h3 className="font-semibold text-gray-800 mb-3">Paskutiniai čekiai</h3>
+                        {receipts.slice(-3).reverse().map(receipt => (
+                          <div key={receipt.id} className="border-l-4 border-indigo-500 pl-3 py-2 mb-2">
+                            <div className="flex justify-between">
+                              <div>
+                                <p className="font-medium">{receipt.store}</p>
+                                <p className="text-sm text-gray-500">{receipt.date}</p>
+                              </div>
+                              <p className="font-bold text-indigo-600">{receipt.total.toFixed(2)}€</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {currentView === 'expenses' && (
+                  <div className="space-y-4">
+                    <div className="bg-white rounded-xl shadow p-4">
+                      <h3 className="font-semibold text-gray-800 mb-4">Išlaidos pagal kategorijas</h3>
+                      {Object.entries(getSpentByCategory()).map(([cat, amount]) => {
+                        const categoryInfo = categories[cat];
+                        const budget = monthlyPlan?.recommendedBudget?.[cat] || 0;
+                        const percentage = budget > 0 ? (amount / budget) * 100 : 0;
+                        
+                        return (
+                          <div key={cat} className="mb-4">
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm font-medium">{categoryInfo.name}</span>
+                              <span className="text-sm font-bold">
+                                {amount.toFixed(2)}€{budget > 0 && ` / ${budget.toFixed(0)}€`}
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="h-2 rounded-full"
+                                style={{ 
+                                  width: `${Math.min(percentage, 100)}%`,
+                                  backgroundColor: categoryInfo.color
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow p-4">
+                      <h3 className="font-semibold text-gray-800 mb-3">Visi pirkimai</h3>
+                      {receipts.map(receipt => (
+                        <div key={receipt.id} className="border rounded-lg p-3 mb-3">
+                          <div className="flex justify-between mb-2">
+                            <div>
+                              <p className="font-medium">{receipt.store}</p>
+                              <p className="text-xs text-gray-500">{receipt.date}</p>
+                            </div>
+                            <p className="font-bold text-lg">{receipt.total.toFixed(2)}€</p>
+                          </div>
+                          {receipt.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-sm py-1">
+                              <span className="flex items-center gap-2">
+                                {item.name}
+                                {!item.essential && (
+                                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+                                    Nebūtina
+                                  </span>
+                                )}
+                              </span>
+                              <span className="text-gray-600">{item.price.toFixed(2)}€</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {currentView === 'plan' && monthlyPlan && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl shadow-lg p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold">Taupymo tikslas</h3>
+                        <Target />
+                      </div>
+                      <p className="text-3xl font-bold mb-1">{savingsGoal}€</p>
+                      <p className="text-green-100">
+                        {monthlyPlan.savingsRealistic ? '✓ Pasiekiamas' : '⚠ Sunkiai pasiekiamas'}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Lightbulb />
+                        <h3 className="font-semibold text-gray-800">AI rekomendacijos</h3>
+                      </div>
+                      <ul className="space-y-2">
+                        {monthlyPlan.recommendations.map((rec, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
+                            <div className="mt-0.5"><Check /></div>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="bg-indigo-50 rounded-xl p-4">
+                      <p className="text-sm text-gray-700">
+                        Galimas papildomas taupymas:{' '}
+                        <span className="font-bold text-indigo-600 text-lg">
+                          {monthlyPlan.potentialSavings.toFixed(2)}€
+                        </span>
+                      </p>
+                    </div>
+
+                    {monthlyPlan.warning && (
+                      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                        <p className="text-red-700 text-sm">{monthlyPlan.warning}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setShowSetup(true)}
+                      className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold active:bg-gray-50"
+                    >
+                      Redaguoti planą
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<ExpenseTrackerApp />, document.getElementById('root'));
+    </script>
+    
+    <script>
+        // Service Worker registracija PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker registruotas'))
+                .catch(err => console.log('Service Worker klaida:', err));
+        }
+    </script>
+</body>
+</html>
